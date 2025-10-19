@@ -1,0 +1,195 @@
+1. Socket Basics
+
+A socket is an endpoint of a communication channel between two programs (in this case, between the server and the clients).
+
+The socket module in Python allows you to work with these communication channels. It supports TCP/IP communication (as well as other protocols) and is used to send and receive data between the server and clients.
+
+2. Server Side (start_server() Function)
+
+Server Setup:
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen()
+
+socket.socket(socket.AF_INET, socket.SOCK_STREAM) creates a new socket for communication using the IPv4 address family (AF_INET) and TCP protocol (SOCK_STREAM).
+
+bind() binds the server to a specific IP address (127.0.0.1, i.e., localhost) and port number (55555).
+
+listen() tells the server to listen for incoming client connections.
+
+Managing Clients:
+
+clients = []
+nicknames = []
+
+
+clients: A list that holds all connected client sockets.
+
+nicknames: A list that stores the nicknames of each connected client.
+
+Broadcast Function:
+
+def broadcast(message, _client=None):
+    for client in clients:
+        if client != _client:
+            try:
+                client.send(message)
+            except:
+                pass
+
+
+The broadcast() function sends messages to all clients except the one that sent the message (_client). This is useful for broadcasting messages like "user has joined/left the chat."
+
+Handling Client Communication (handle_client()):
+
+def handle_client(client):
+    while True:
+        try:
+            msg = client.recv(1024)
+            if not msg:
+                break
+            broadcast(msg, client)
+        except:
+            if client in clients:
+                index = clients.index(client)
+                client.close()
+                nickname = nicknames[index]
+                broadcast(f"{nickname} left the chat.".encode('utf-8'))
+                nicknames.remove(nickname)
+                clients.remove(client)
+            break
+
+
+The handle_client() function listens for messages from a specific client.
+
+client.recv(1024) receives up to 1024 bytes of data (a message) from the client.
+
+If a message is received, it is broadcasted to other clients. If the client disconnects or an error occurs, the server removes the client from the list and broadcasts that they left.
+
+Accepting Client Connections (accept_connections()):
+
+def accept_connections():
+    while True:
+        client, address = server.accept()
+        print(f"Connected with {address}")
+        client.send("NICK".encode('utf-8'))
+        nickname = client.recv(1024).decode('utf-8')
+        nicknames.append(nickname)
+        clients.append(client)
+        print(f"Nickname: {nickname}")
+        broadcast(f"{nickname} joined the chat!".encode('utf-8'))
+        client.send("Connected to the server!".encode('utf-8'))
+        thread = threading.Thread(target=handle_client, args=(client,))
+        thread.start()
+
+
+server.accept() accepts incoming client connections.
+
+The server prompts the client for their nickname (this is done by sending a message with "NICK", and the client responds with their nickname).
+
+Once the nickname is received, the server adds the nickname and client socket to the lists (nicknames and clients).
+
+A new thread is started for each client to handle communication via handle_client(). This allows the server to handle multiple clients simultaneously.
+
+3. Client Side (start_client() Function)
+
+Client Setup:
+
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect((HOST, PORT))
+
+
+The client creates a socket just like the server but connects to the server using client.connect((HOST, PORT)), where HOST is 127.0.0.1 and PORT is 55555.
+
+Nickname and Receiving Messages:
+
+nickname = input("Choose your nickname: ")
+client.send(nickname.encode('utf-8'))
+
+
+The client asks the user for a nickname and sends it to the server.
+
+def receive():
+    while not stop_threads:
+        try:
+            msg = client.recv(1024).decode('utf-8')
+            if msg == 'NICK':
+                client.send(nickname.encode('utf-8'))
+            else:
+                print(msg)
+        except:
+            print("❌ Connection closed.")
+            stop_threads = True
+            client.close()
+            break
+
+
+The receive() function continuously listens for messages from the server. If the server sends a message asking for a nickname ('NICK'), the client sends its nickname back. Otherwise, it prints any other received messages.
+
+Sending Messages:
+
+def write():
+    while not stop_threads:
+        msg = f"{nickname}: {input('')}"
+        try:
+            client.send(msg.encode('utf-8'))
+        except:
+            break
+
+
+The write() function allows the client to send messages to the server. It formats the message as "{nickname}: message", then sends it to the server.
+
+Multithreading for Receive and Send:
+
+threading.Thread(target=receive, daemon=True).start()
+threading.Thread(target=write, daemon=True).start()
+
+
+Two threads are started:
+
+One for receiving messages from the server (receive()).
+
+One for sending messages to the server (write()).
+
+4. Main Program:
+
+At the bottom, the program asks the user if they want to run the server or the client:
+
+if __name__ == "__main__":
+    print("Choose mode:")
+    print("1. Start server")
+    print("2. Start client")
+    choice = input("Enter 1 or 2: ").strip()
+
+    if choice == '1':
+        start_server()
+    elif choice == '2':
+        start_client()
+    else:
+        print("Invalid choice. Please restart the program.")
+
+
+Option 1: Starts the server by calling start_server().
+
+Option 2: Starts the client by calling start_client().
+
+Invalid Input: If the user enters anything other than 1 or 2, the program prints an error message.
+
+Summary:
+
+Server Side:
+
+Manages multiple client connections.
+
+Broadcasts messages to all connected clients.
+
+Uses threading to handle each client in parallel.
+
+Client Side:
+
+Connects to the server, sends and receives messages.
+
+Uses threading to manage sending and receiving messages concurrently.
+
+In essence, this is a simple multi-client chat application where the server can handle many clients, and clients can send messages to each other in real-time.
